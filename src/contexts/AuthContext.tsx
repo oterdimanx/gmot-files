@@ -70,6 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 const signUp = async (email: string, password: string, username?: string): Promise<void> => {
   setIsLoading(true);
   try {
+    // 1. Create auth account
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -77,23 +78,36 @@ const signUp = async (email: string, password: string, username?: string): Promi
         data: { username }
       }
     });
-
     if (error) throw error;
-    
-    // CRITICAL PART: Create user profile after successful auth
+
+    // 2. CRITICAL: Create profile in gmot.users
     if (data.user) {
-      try {
-        // Use fileService to create profile in gmot.users
-        await fileService.ensureUserProfile(data.user.id, data.user.email);
+      console.log('Signup successful. Attempting to create profile in gmot.users for:', data.user.id);
+      
+      // Use a direct, simple insert with the same client
+      const { error: profileError } = await supabase
+        .from('users')
+        .insert({
+          id: data.user.id,
+          email: data.user.email,
+          username: username || data.user.email?.split('@')[0] || 'user'
+        });
+
+      // Analyze the result
+      if (profileError) {
+        console.error('❌ Profile insert failed:', profileError);
+        // Code '23505' means "Already exists" - this is OK if it happens
+        if (profileError.code !== '23505') {
+          toast.warning('Account created, but profile setup had an issue.');
+        }
+      } else {
         console.log('✅ User profile created in gmot.users');
-      } catch (profileError) {
-        console.warn('⚠️ Profile creation had an issue (non-critical):', profileError);
-        // Don't throw - auth succeeded even if profile has minor issues
       }
     }
     
-    toast.success('Account created! Please check your email to confirm.');
+    toast.success('Account created successfully!');
   } catch (error) {
+    console.error('Signup process failed:', error);
     toast.error(error instanceof Error ? error.message : 'Sign up failed');
     throw error;
   } finally {
