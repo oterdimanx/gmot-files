@@ -2,54 +2,65 @@ import { DroppedFile, Folder } from '@/types/file'
 import { fileService } from './fileService'
 
 export class SupabaseSyncService {
-  // Map to track what's already synced
-  private syncedFileIds = new Set<string>()
-  private syncedFolderIds = new Set<string>()
+  // Remove the synced sets as the new logic handles duplicates
+  // private syncedFileIds = new Set<string>()
+  // private syncedFolderIds = new Set<string>()
 
   async syncFilesToSupabase(localFiles: DroppedFile[], localFolders: Folder[]) {
     console.log('Syncing:', localFiles.length, 'files,', localFolders.length, 'folders')
     
     try {
-      // 1. Sync folders
+      // Get current user via fileService
+      const user = await fileService.getCurrentUser();
+      if (!user) {
+        console.log('No user, skipping sync');
+        return;
+      }
+
+      // 1. Sync folders - USING fileService METHOD
       for (const folder of localFolders) {
-        if (!this.syncedFolderIds.has(folder.id)) {
-          try {
-            await fileService.createFolder(folder.name, folder.color)
-            this.syncedFolderIds.add(folder.id)
-            console.log('Synced folder:', folder.name)
-          } catch (error) {
-            // Folder might already exist in Supabase
-            console.log('Folder sync skipped:', folder.name)
+        try {
+          // Use fileService.getFolders() to check for existing folders
+          const allFolders = await fileService.getFolders();
+          const folderExists = allFolders.some(f => f.name === folder.name);
+          
+          if (!folderExists) {
+            await fileService.createFolder(folder.name, folder.color);
+            console.log('✅ Created folder:', folder.name);
+          } else {
+            console.log('⏩ Folder already exists:', folder.name);
           }
+        } catch (error) {
+          console.log('⚠️ Folder sync skipped:', folder.name, (error as Error).message);
         }
       }
 
-      // 2. Sync files
+      // 2. Sync files - USING fileService METHOD
       for (const file of localFiles) {
-        if (!this.syncedFileIds.has(file.id)) {
-          try {
-            await fileService.uploadFile(file.file, file.folderId || undefined)
-            this.syncedFileIds.add(file.id)
-            console.log('Synced file:', file.name)
-          } catch (error) {
-            console.log('File sync skipped:', file.name)
+        try {
+          // Use fileService.getFiles() to check for existing files
+          const allFiles = await fileService.getFiles();
+          const fileExists = allFiles.some(f => f.name === file.name);
+          
+          if (!fileExists) {
+            await fileService.uploadFile(file.file, file.folderId || undefined);
+            console.log('✅ Uploaded file:', file.name);
+          } else {
+            console.log('⏩ File already exists:', file.name);
           }
+        } catch (error) {
+          console.log('⚠️ File sync skipped:', file.name, (error as Error).message);
         }
       }
 
-      // 3. Clean up deleted items (optional - more advanced)
-      // You could track deletions separately
-      
+      console.log('✅ Sync completed');
     } catch (error) {
-      console.error('Sync error:', error)
-      throw error
+      console.error('❌ Sync error:', error);
     }
   }
 
-  // Clear sync cache (useful on logout)
   clearCache() {
-    this.syncedFileIds.clear()
-    this.syncedFolderIds.clear()
+    // Nothing to clear in this new approach
   }
 }
 
