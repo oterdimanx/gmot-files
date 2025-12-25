@@ -387,46 +387,66 @@ export class FileService {
     return { success: true };
   }
 
-async getFileShares(fileId: string) {
-  // First, get all shares for this file
-  const { data: shares, error } = await this.supabase
-    .from('file_shares')
-    .select('shared_with_id, permission_level')
-    .eq('file_id', fileId);
+  async getFileShares(fileId: string): Promise<Array<{id: string; email: string; permission: string}>> {
+    console.log('📋 getFileShares called for file:', fileId);
+    
+    try {
+      // Direct query without complex joins (simpler, more reliable)
+      const { data: shares, error } = await this.supabase
+        .from('file_shares')
+        .select('shared_with_id, permission_level')
+        .eq('file_id', fileId);
 
-  if (error) throw error;
-  if (!shares || shares.length === 0) return [];
+      if (error) {
+        console.error('❌ getFileShares query error:', error);
+        // Check if it's a "table not found" error
+        if (error.code === 'PGRST204' || error.message.includes('not found')) {
+          console.error('Table file_shares might not exist or have wrong permissions');
+        }
+        return [];
+      }
 
-  // Get user emails for each shared_with_id
-  const userIds = shares.map(share => share.shared_with_id);
-  const { data: users, error: usersError } = await this.supabase
-    .from('users')
-    .select('id, email')
-    .in('id', userIds);
+      console.log('✅ Found', shares?.length || 0, 'shares for file', fileId);
+      
+      if (!shares || shares.length === 0) {
+        return [];
+      }
 
-  if (usersError) {
-    console.error('Error fetching users:', usersError);
-    // Return shares without emails
-    return shares.map(share => ({
-      id: share.shared_with_id,
-      email: 'Unknown',
-      permission: share.permission_level
-    }));
+      // Get user emails for each shared_with_id
+      const userIds = shares.map(share => share.shared_with_id);
+      const { data: users, error: usersError } = await this.supabase
+        .from('users')
+        .select('id, email')
+        .in('id', userIds);
+
+      if (usersError) {
+        console.warn('⚠️ Could not fetch user emails:', usersError);
+        // Return shares without emails
+        return shares.map(share => ({
+          id: share.shared_with_id,
+          email: 'Unknown',
+          permission: share.permission_level
+        }));
+      }
+
+      // Create a map of user id -> email
+      const userMap = new Map();
+      (users || []).forEach(user => {
+        userMap.set(user.id, user.email);
+      });
+
+      // Combine shares with user emails
+      return shares.map(share => ({
+        id: share.shared_with_id,
+        email: userMap.get(share.shared_with_id) || 'Unknown',
+        permission: share.permission_level
+      }));
+
+    } catch (error) {
+      console.error('💥 getFileShares unexpected error:', error);
+      return [];
+    }
   }
-
-  // Create a map of user id -> email
-  const userMap = new Map();
-  (users || []).forEach(user => {
-    userMap.set(user.id, user.email);
-  });
-
-  // Combine the data
-  return shares.map(share => ({
-    id: share.shared_with_id,
-    email: userMap.get(share.shared_with_id) || 'Unknown',
-    permission: share.permission_level
-  }));
-}
 
   async getSharedFiles() {
     const user = await this.getCurrentUser();
