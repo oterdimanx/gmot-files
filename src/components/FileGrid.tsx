@@ -1,6 +1,9 @@
 import { DroppedFile, Folder } from '@/types/file';
 import FileCard from './FileCard';
 import FolderCard from './FolderCard';
+import { ShareFileDialog } from '@/components/sharing/ShareFileDialog';
+import { Button } from '@/components/ui/button';
+import { Share2 } from 'lucide-react';
 
 interface FileGridProps {
   files: DroppedFile[];
@@ -55,15 +58,29 @@ const FileGrid = ({
       
       {/* Render files */}
       {visibleFiles.map((file, index) => (
-        <FileCard
-          key={file.id}
-          file={file}
-          onRemove={onRemoveFile}
-          onMoveToRoot={currentFolderId ? onMoveFileToRoot : undefined}
-          index={showFolders ? folders.length + index : index}
-          draggable={!currentFolderId}
-          isInFolder={!!currentFolderId}
-        />
+        <div key={file.id} className="relative group">
+          <FileCard
+            file={file}
+            onRemove={onRemoveFile}
+            onMoveToRoot={currentFolderId ? onMoveFileToRoot : undefined}
+            index={showFolders ? folders.length + index : index}
+            draggable={!currentFolderId}
+            isInFolder={!!currentFolderId}
+          />
+          
+          {/* Share button overlay - appears on hover */}
+          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <ShareFileDialog fileId={file.id} fileName={file.name}>
+              <Button
+                variant="secondary"
+                size="icon"
+                className="h-8 w-8 bg-background/80 backdrop-blur-sm hover:bg-background"
+              >
+                <Share2 className="w-4 h-4" />
+              </Button>
+            </ShareFileDialog>
+          </div>
+        </div>
       ))}
     </div>
   );
