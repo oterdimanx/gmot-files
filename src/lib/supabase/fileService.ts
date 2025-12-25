@@ -520,36 +520,48 @@ async getFileShares(fileId: string) {
     return data || [];
   }
 
-public async ensureUserProfile(userId: string, email?: string) {
+public async ensureUserProfile(userId: string, email?: string): Promise<boolean> {
+  console.log('📝 ensureUserProfile called:', userId, email);
+  
   try {
-    // Check if user exists in gmot.users
+    // First check if user already exists in gmot.users
     const { data: existingUser, error: checkError } = await this.supabase
       .from('users')
       .select('id')
       .eq('id', userId)
       .single();
     
-    // If user doesn't exist, create them
+    // If user doesn't exist (error code PGRST116 means "not found")
     if (checkError?.code === 'PGRST116' || !existingUser) {
-      console.log('Creating user profile for:', userId);
+      console.log('👤 Creating new user profile in gmot.users...');
       
-      const { error: createError } = await this.supabase
+      const { error: insertError } = await this.supabase
         .from('users')
         .insert({
           id: userId,
           email: email || 'user@example.com',
-          username: email?.split('@')[0] || 'user'
+          username: email?.split('@')[0] || 'user',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         });
       
-      if (createError && createError.code !== '23505') { // Ignore duplicate key errors
-        console.error('Failed to create user profile:', createError);
-        throw createError;
+      if (insertError) {
+        // 23505 = duplicate key error (user already exists)
+        if (insertError.code !== '23505') {
+          console.error('❌ Failed to create user profile:', insertError);
+          throw insertError;
+        }
+        console.log('ℹ️ User already exists (duplicate key)');
+      } else {
+        console.log('✅ User profile created successfully');
       }
+    } else {
+      console.log('✅ User profile already exists');
     }
     
     return true;
   } catch (error) {
-    console.error('Error ensuring user profile:', error);
+    console.error('❌ ensureUserProfile failed:', error);
     throw error;
   }
 }

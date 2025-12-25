@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react'
 import { User } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
+import { fileService } from '@/lib/supabase/fileService'
 
 interface AuthContextType {
   user: User | null
@@ -66,47 +67,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const signUp = async (email: string, password: string, username?: string): Promise<void> => {
-    setIsLoading(true);
-    try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { username }
-        }
-      });
-
-      if (error) throw error;
-      
-      // CRITICAL: Create user profile in gmot.users
-      if (data.user) {
-        console.log('Creating user profile for:', data.user.id);
-        
-        // Direct insert into gmot.users
-        const { error: profileError } = await supabase
-          .from('users')
-          .insert({
-            id: data.user.id,
-            email: data.user.email,
-            username: username || data.user.email?.split('@')[0] || 'user'
-          });
-        
-        if (profileError && profileError.code !== '23505') { // Ignore duplicate errors
-          console.error('Failed to create user profile:', profileError);
-        }
+const signUp = async (email: string, password: string, username?: string): Promise<void> => {
+  setIsLoading(true);
+  try {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { username }
       }
-      
-      toast.success('Account created!');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Sign up failed');
-      throw error;
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    });
 
-  const signOut = async (): Promise<void> => {
+    if (error) throw error;
+    
+    // CRITICAL PART: Create user profile after successful auth
+    if (data.user) {
+      try {
+        // Use fileService to create profile in gmot.users
+        await fileService.ensureUserProfile(data.user.id, data.user.email);
+        console.log('✅ User profile created in gmot.users');
+      } catch (profileError) {
+        console.warn('⚠️ Profile creation had an issue (non-critical):', profileError);
+        // Don't throw - auth succeeded even if profile has minor issues
+      }
+    }
+    
+    toast.success('Account created! Please check your email to confirm.');
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : 'Sign up failed');
+    throw error;
+  } finally {
+    setIsLoading(false);
+  }
+};
+
+const signOut = async (): Promise<void> => {
     setIsLoading(true)
     try {
       const { error } = await supabase.auth.signOut()
