@@ -284,6 +284,9 @@ export class FileService {
 
   // Sharing methods
   async shareFile(fileId: string, userEmail: string, permission: 'view' | 'edit' | 'admin' = 'view') {
+
+    console.log('1. Starting shareFile:', { fileId, userEmail, permission });
+
     // 1. Find user by email
     const { data: users, error: searchError } = await this.supabase
       .from('users')

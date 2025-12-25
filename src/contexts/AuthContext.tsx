@@ -67,26 +67,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const signUp = async (email: string, password: string, username?: string): Promise<void> => {
-    setIsLoading(true)
+    setIsLoading(true);
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: { username }
         }
-      })
+      });
 
-      if (error) throw error
+      if (error) throw error;
       
-      toast.success('Account created! Please check your email to confirm.')
+      // CRITICAL: Create user profile in gmot.users
+      if (data.user) {
+        console.log('Creating user profile for:', data.user.id);
+        
+        // Direct insert into gmot.users
+        const { error: profileError } = await supabase
+          .from('users')
+          .insert({
+            id: data.user.id,
+            email: data.user.email,
+            username: username || data.user.email?.split('@')[0] || 'user'
+          });
+        
+        if (profileError && profileError.code !== '23505') { // Ignore duplicate errors
+          console.error('Failed to create user profile:', profileError);
+        }
+      }
+      
+      toast.success('Account created!');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Sign up failed')
-      throw error
+      toast.error(error instanceof Error ? error.message : 'Sign up failed');
+      throw error;
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const signOut = async (): Promise<void> => {
     setIsLoading(true)
