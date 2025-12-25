@@ -2,7 +2,6 @@ import React, { createContext, useContext, useEffect, useState } from 'react'
 import { User } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
-import { fileService } from '@/lib/supabase/fileService'
 
 interface AuthContextType {
   user: User | null
@@ -18,10 +17,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   
-  const supabase = createClient()
+  const supabase = createClient() // Client WITHOUT schema for auth
 
   useEffect(() => {
-    // Initial user check
     const initializeAuth = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser()
@@ -36,7 +34,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     initializeAuth()
     
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         console.log('Auth state changed:', event)
@@ -67,55 +64,57 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-const signUp = async (email: string, password: string, username?: string): Promise<void> => {
-  setIsLoading(true);
-  try {
-    // 1. Create auth account
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { username }
-      }
-    });
-    if (error) throw error;
-
-    // 2. CRITICAL: Create profile in gmot.users
-    if (data.user) {
-      console.log('Signup successful. Attempting to create profile in gmot.users for:', data.user.id);
-      
-      // Use a direct, simple insert with the same client
-      const { error: profileError } = await supabase
-        .from('users')
-        .insert({
-          id: data.user.id,
-          email: data.user.email,
-          username: username || data.user.email?.split('@')[0] || 'user'
-        });
-
-      // Analyze the result
-      if (profileError) {
-        console.error('❌ Profile insert failed:', profileError);
-        // Code '23505' means "Already exists" - this is OK if it happens
-        if (profileError.code !== '23505') {
-          toast.warning('Account created, but profile setup had an issue.');
+  const signUp = async (email: string, password: string, username?: string): Promise<void> => {
+    setIsLoading(true)
+    try {
+      // 1. Create auth user (using auth client without schema)
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { username }
         }
-      } else {
-        console.log('✅ User profile created in gmot.users');
-      }
-    }
-    
-    toast.success('Account created successfully!');
-  } catch (error) {
-    console.error('Signup process failed:', error);
-    toast.error(error instanceof Error ? error.message : 'Sign up failed');
-    throw error;
-  } finally {
-    setIsLoading(false);
-  }
-};
+      })
 
-const signOut = async (): Promise<void> => {
+      if (error) throw error
+      
+      // 2. CRITICAL: Create user profile in gmot.users using schema client
+      if (data.user) {
+        console.log('Creating user in gmot.users:', data.user.id)
+        
+        // Import and use the schema-specific client
+        const { createClientWithSchema } = await import('@/lib/supabase/client')
+        const dbClient = createClientWithSchema() // Client WITH gmot schema
+        
+        const { error: userError } = await dbClient
+          .from('users') // This now points to gmot.users
+          .insert({
+            id: data.user.id,
+            email: data.user.email,
+            username: username || data.user.email?.split('@')[0] || 'user'
+          })
+        
+        if (userError) {
+          console.log('User creation note:', userError.message)
+          // 23505 = duplicate key error (user already exists) - that's OK
+          if (userError.code !== '23505') {
+            console.warn('Non-duplicate error:', userError)
+          }
+        } else {
+          console.log('✅ User created in gmot.users')
+        }
+      }
+      
+      toast.success('Account created! Please check your email to confirm.')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Sign up failed')
+      throw error
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const signOut = async (): Promise<void> => {
     setIsLoading(true)
     try {
       const { error } = await supabase.auth.signOut()

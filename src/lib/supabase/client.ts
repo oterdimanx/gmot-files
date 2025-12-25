@@ -1,22 +1,21 @@
 import { createBrowserClient } from '@supabase/ssr'
 
-// 1. Basic client WITHOUT schema settings (for auth)
+// 1. Client WITHOUT schema for auth operations (login, signup, session)
 export const createClient = () => {
   return createBrowserClient(
     import.meta.env.VITE_SUPABASE_URL!,
     import.meta.env.VITE_SUPABASE_ANON_KEY!
-    // NO schema settings here - auth doesn't need them
   )
 }
 
-// 2. Client WITH schema settings (for file operations)
+// 2. Client WITH schema for database operations (files, folders, users)
 export const createClientWithSchema = () => {
   return createBrowserClient(
     import.meta.env.VITE_SUPABASE_URL!,
     import.meta.env.VITE_SUPABASE_ANON_KEY!,
     {
       db: {
-        schema: 'gmot'
+        schema: 'gmot'  // This tells Supabase to use gmot schema
       }
     }
   )
