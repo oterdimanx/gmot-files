@@ -1,16 +1,20 @@
 import { useState, useCallback } from 'react';
-import { Layers, Trash2, ChevronLeft, Home, Loader2, LogOut } from 'lucide-react';
+import { Layers, Trash2, ChevronLeft, Home, Loader2, LogOut, User, FolderOpen, Users } from 'lucide-react';
 import DropZone from '@/components/DropZone';
 import FileGrid from '@/components/FileGrid';
 import CreateFolderDialog from '@/components/CreateFolderDialog';
-import StorageIndicator from '@/components/StorageIndicator';
+import SharedWithMe from '@/components/SharedWithMe';
 import { DroppedFile, formatFileSize } from '@/types/file';
 import { Button } from '@/components/ui/button';
-import { useHybridStorage } from '@/hooks/useHybridStorage';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useBackendStorage } from '@/hooks/useBackendStorage';
 import { useAuth } from '@/contexts/AuthContext';
-import { toast } from 'sonner';
-import { SharedFilesSection } from '@/components/sharing/SharedFilesSection';
-import { ShareFileDialog } from '@/components/sharing/ShareFileDialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 const Index = () => {
   const { user, signOut } = useAuth();
@@ -26,15 +30,15 @@ const Index = () => {
     renameFolder,
     moveFileToFolder,
     moveFileToRoot,
-    isSyncing,
-  } = useHybridStorage();
+    downloadFile,
+  } = useBackendStorage();
 
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('my-files');
 
   const currentFolder = folders.find(f => f.id === currentFolderId);
 
   const handleFilesDropped = useCallback((newFiles: DroppedFile[]) => {
-    // Add files to current folder if we're inside one
     const filesWithFolder = newFiles.map(f => ({
       ...f,
       folderId: currentFolderId,
@@ -62,17 +66,6 @@ const Index = () => {
     setCurrentFolderId(null);
   }, []);
 
-  const handleSignOut = async () => {
-    try {
-      await signOut();
-      toast.success('Signed out successfully');
-    } catch (error) {
-      toast.error('Failed to sign out');
-      console.error('Sign out error:', error);
-    }
-  };
-
-  // Calculate visible files count
   const visibleFiles = files.filter(f => 
     currentFolderId ? f.folderId === currentFolderId : !f.folderId
   );
@@ -81,8 +74,7 @@ const Index = () => {
     ? visibleFiles.length 
     : folders.length + visibleFiles.length;
 
-  // Show loading state when initially loading
-  if (isLoading && files.length === 0 && folders.length === 0) {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -95,7 +87,6 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header with Auth Info */}
       <header className="border-b border-border/50 bg-card/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="container max-w-6xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
@@ -105,24 +96,16 @@ const Index = () => {
               </div>
               <div>
                 <h1 className="text-xl font-bold text-foreground">FileHub</h1>
-                <p className="text-xs text-muted-foreground">
-                  {user ? `Signed in as ${user.email}` : 'Drop, preview, organize'}
-                </p>
+                <p className="text-xs text-muted-foreground">Drop, preview, organize, share</p>
               </div>
             </div>
 
             <div className="flex items-center gap-3">
-              {/* Sync Status Indicator */}
-              {isSyncing && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
-                  <span className="hidden sm:inline">Syncing...</span>
-                </div>
+              {activeTab === 'my-files' && !currentFolderId && (
+                <CreateFolderDialog onCreateFolder={createFolder} />
               )}
-
-              {!currentFolderId && <CreateFolderDialog onCreateFolder={createFolder} />}
               
-              {(files.length > 0 || folders.length > 0) && (
+              {activeTab === 'my-files' && (files.length > 0 || folders.length > 0) && (
                 <>
                   <div className="hidden sm:flex items-center gap-3 text-sm text-muted-foreground">
                     <span className="font-medium text-foreground">{totalItems}</span> items
@@ -145,25 +128,29 @@ const Index = () => {
                 </>
               )}
 
-              {/* Sign Out Button */}
-              {user && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleSignOut}
-                  className="ml-2"
-                >
-                  <LogOut className="w-4 h-4 mr-2" />
-                  Sign Out
-                </Button>
-              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <User className="w-4 h-4" />
+                    <span className="hidden sm:inline truncate max-w-32">
+                      {user?.email?.split('@')[0]}
+                    </span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => signOut()} className="text-destructive">
+                    <LogOut className="w-4 h-4 mr-2" />
+                    Sign out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </div>
       </header>
 
       {/* Breadcrumb when inside folder */}
-      {currentFolderId && currentFolder && (
+      {activeTab === 'my-files' && currentFolderId && currentFolder && (
         <div className="border-b border-border/30 bg-secondary/30">
           <div className="container max-w-6xl mx-auto px-4 py-2">
             <div className="flex items-center gap-2">
@@ -189,33 +176,22 @@ const Index = () => {
         </div>
       )}
 
-      {/* Main content */}
       <main className="container max-w-6xl mx-auto px-4 py-8">
-        {!user ? (
-          // Show auth message when not signed in
-          <div className="text-center py-12">
-            <div className="max-w-md mx-auto">
-              <div className="p-4 rounded-xl bg-primary/10 inline-block mb-4">
-                <Layers className="w-12 h-12 text-primary" />
-              </div>
-              <h2 className="text-2xl font-bold mb-2">Welcome to FileHub</h2>
-              <p className="text-muted-foreground mb-6">
-                Please sign in to access your files and folders
-              </p>
-              <Button onClick={() => window.location.href = '/signin'}>
-                Sign In
-              </Button>
-            </div>
-          </div>
-        ) : (
-          // Show file management when signed in
-          <div className="space-y-8">
-            {/* Shared Files Section - Add near the top */}
-            <SharedFilesSection />
-            {/* Drop zone */}
+        <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setCurrentFolderId(null); }}>
+          <TabsList className="mb-6">
+            <TabsTrigger value="my-files" className="gap-2">
+              <FolderOpen className="w-4 h-4" />
+              My Files
+            </TabsTrigger>
+            <TabsTrigger value="shared" className="gap-2">
+              <Users className="w-4 h-4" />
+              Shared with me
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="my-files" className="space-y-8">
             <DropZone onFilesDropped={handleFilesDropped} hasFiles={totalItems > 0} />
 
-            {/* File grid */}
             {totalItems > 0 && (
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
@@ -235,38 +211,35 @@ const Index = () => {
                   onRenameFolder={renameFolder}
                   onMoveFileToFolder={moveFileToFolder}
                   onMoveFileToRoot={moveFileToRoot}
+                  onDownloadFile={downloadFile}
                   currentFolderId={currentFolderId}
                 />
               </div>
             )}
 
-            {/* Empty state message */}
             {totalItems === 0 && (
               <div className="text-center py-12">
                 <p className="text-muted-foreground">
                   {currentFolderId 
                     ? 'This folder is empty. Drop files here to add them.'
-                    : 'Your files will appear here. Drag & drop to upload.'
+                    : 'Your dropped files will appear here'
                   }
                 </p>
               </div>
             )}
-          </div>
-        )}
+          </TabsContent>
+
+          <TabsContent value="shared">
+            <SharedWithMe />
+          </TabsContent>
+        </Tabs>
       </main>
 
-      {/* Footer - Updated message */}
       <footer className="border-t border-border/50 mt-auto">
         <div className="container max-w-6xl mx-auto px-4 py-4">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-2">
-            <p className="text-xs text-muted-foreground">
-              {user 
-                ? 'Files are stored securely in the cloud'
-                : 'Sign in to access cloud storage'
-              }
-            </p>
-            {user && <StorageIndicator refreshTrigger={files.length + folders.length} />}
-          </div>
+          <p className="text-center text-xs text-muted-foreground">
+            Files are securely stored in the cloud
+          </p>
         </div>
       </footer>
     </div>

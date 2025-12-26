@@ -1,22 +1,19 @@
-export interface Folder {
-  id: string;
-  name: string;
-  color: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
 export interface DroppedFile {
   id: string;
   file: File;
   name: string;
   size: number;
   type: string;
-  preview: string;
-  textContent: string;
-  folderId: string;
+  preview?: string;
+  textContent?: string;
+  folderId?: string | null;
+}
+
+export interface Folder {
+  id: string;
+  name: string;
+  color: string;
   createdAt: Date;
-  updatedAt: Date;
 }
 
 export type FileCategory = 'image' | 'text' | 'html' | 'pdf' | 'video' | 'audio' | 'other';

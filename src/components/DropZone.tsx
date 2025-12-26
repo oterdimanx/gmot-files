@@ -15,7 +15,7 @@ const DropZone = ({ onFilesDropped, hasFiles }: DropZoneProps) => {
 
     for (const file of Array.from(files)) {
       const droppedFile: DroppedFile = {
-        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        id: crypto.randomUUID(),
         file,
         name: file.name,
         size: file.size,

@@ -1,146 +1,77 @@
-import React, { createContext, useContext, useEffect, useState } from 'react'
-import { User } from '@supabase/supabase-js'
-import { createClient } from '@/lib/supabase/client'
-import { toast } from 'sonner'
+import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { User, Session } from '@supabase/supabase-js';
+import { supabase } from '@/integrations/supabase/client';
 
 interface AuthContextType {
-  user: User | null
-  isLoading: boolean
-  signIn: (email: string, password: string) => Promise<void>
-  signUp: (email: string, password: string, username?: string) => Promise<void>
-  signOut: () => Promise<void>
+  user: User | null;
+  session: Session | null;
+  isLoading: boolean;
+  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, displayName?: string) => Promise<{ error: Error | null }>;
+  signOut: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined)
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  
-  const supabase = createClient() // Client WITHOUT schema for auth
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const initializeAuth = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-        setUser(user)
-      } catch (error) {
-        console.error('Error checking user:', error)
-        setUser(null)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    initializeAuth()
-    
+    // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        console.log('Auth state changed:', event)
-        setUser(session?.user ?? null)
-        setIsLoading(false)
+        setSession(session);
+        setUser(session?.user ?? null);
+        setIsLoading(false);
       }
-    )
+    );
 
-    return () => subscription.unsubscribe()
-  }, [])
+    // THEN check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      setIsLoading(false);
+    });
 
-  const signIn = async (email: string, password: string): Promise<void> => {
-    setIsLoading(true)
-    try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      })
-      
-      if (error) throw error
-      
-      toast.success('Signed in successfully')
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Sign in failed')
-      throw error
-    } finally {
-      setIsLoading(false)
-    }
-  }
+    return () => subscription.unsubscribe();
+  }, []);
 
-  const signUp = async (email: string, password: string, username?: string): Promise<void> => {
-    setIsLoading(true)
-    try {
-      // 1. Create auth user (using auth client without schema)
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { username }
-        }
-      })
+  const signIn = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    return { error: error as Error | null };
+  };
 
-      if (error) throw error
-      
-      // 2. CRITICAL: Create user profile in gmot.users using schema client
-      if (data.user) {
-        console.log('Creating user in gmot.users:', data.user.id)
-        
-        // Import and use the schema-specific client
-        const { createClientWithSchema } = await import('@/lib/supabase/client')
-        const dbClient = createClientWithSchema() // Client WITH gmot schema
-        
-        const { error: userError } = await dbClient
-          .from('users') // This now points to gmot.users
-          .insert({
-            id: data.user.id,
-            email: data.user.email,
-            username: username || data.user.email?.split('@')[0] || 'user'
-          })
-        
-        if (userError) {
-          console.log('User creation note:', userError.message)
-          // 23505 = duplicate key error (user already exists) - that's OK
-          if (userError.code !== '23505') {
-            console.warn('Non-duplicate error:', userError)
-          }
-        } else {
-          console.log('✅ User created in gmot.users')
-        }
-      }
-      
-      toast.success('Account created! Please check your email to confirm.')
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Sign up failed')
-      throw error
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  const signUp = async (email: string, password: string, displayName?: string) => {
+    const redirectUrl = `${window.location.origin}/`;
+    
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: redirectUrl,
+        data: displayName ? { display_name: displayName } : undefined,
+      },
+    });
+    return { error: error as Error | null };
+  };
 
-  const signOut = async (): Promise<void> => {
-    setIsLoading(true)
-    try {
-      const { error } = await supabase.auth.signOut()
-      if (error) throw error
-      
-      toast.success('Signed out successfully')
-      setUser(null)
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Sign out failed')
-      throw error
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  const signOut = async () => {
+    await supabase.auth.signOut();
+  };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, session, isLoading, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
-  )
-}
+  );
+};
 
-export function useAuth() {
-  const context = useContext(AuthContext)
+export const useAuth = () => {
+  const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider')
+    throw new Error('useAuth must be used within an AuthProvider');
   }
-  return context
-}
+  return context;
+};

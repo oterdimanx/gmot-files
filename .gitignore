@@ -26,3 +26,6 @@ dist-ssr
 .env
 /public/files/*
 !public/files/.gitkeep
+
+/supabase/migrations/*
+/supabase/netlify.toml

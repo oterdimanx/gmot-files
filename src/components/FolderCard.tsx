@@ -7,6 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import ShareDialog from './ShareDialog';
 
 interface FolderCardProps {
   folder: Folder;
@@ -157,7 +158,10 @@ const FolderCard = ({ folder, fileCount, onOpen, onDelete, onRename, onFileDrop,
                 {fileCount} {fileCount === 1 ? 'file' : 'files'}
               </p>
             </div>
-            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            <div className="flex items-center gap-1">
+              <ShareDialog targetType="folder" targetId={folder.id} targetName={folder.name} />
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            </div>
           </div>
         </div>
       </div>

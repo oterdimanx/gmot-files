@@ -1,17 +1,20 @@
 import { useState, DragEvent } from 'react';
-import { X, FileText, FileCode, FileImage, File, FileVideo, FileAudio, FileType, GripVertical, FolderOutput } from 'lucide-react';
+import { X, FileText, FileCode, FileImage, File, FileVideo, FileAudio, FileType, GripVertical, FolderOutput, Download } from 'lucide-react';
 import { DroppedFile, getFileCategory, formatFileSize } from '@/types/file';
+import ShareDialog from './ShareDialog';
 
 interface FileCardProps {
   file: DroppedFile;
   onRemove: (id: string) => void;
   onMoveToRoot?: (id: string) => void;
+  onDownload?: (id: string) => void;
+  onPreview?: () => void;
   index: number;
   draggable?: boolean;
   isInFolder?: boolean;
 }
 
-const FileCard = ({ file, onRemove, onMoveToRoot, index, draggable = true, isInFolder = false }: FileCardProps) => {
+const FileCard = ({ file, onRemove, onMoveToRoot, onDownload, onPreview, index, draggable = true, isInFolder = false }: FileCardProps) => {
   const [isHovered, setIsHovered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const category = getFileCategory(file.type);
@@ -61,11 +64,13 @@ const FileCard = ({ file, onRemove, onMoveToRoot, index, draggable = true, isInF
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className={`
+      <div 
+        onClick={onPreview}
+        className={`
         relative bg-card rounded-xl overflow-hidden transition-all duration-300 ease-out
         file-card-shadow hover:file-card-shadow-hover
         ${isHovered ? 'transform -translate-y-1' : ''}
-        ${draggable ? 'cursor-grab active:cursor-grabbing' : ''}
+        ${onPreview ? 'cursor-pointer' : draggable ? 'cursor-grab active:cursor-grabbing' : ''}
       `}>
         {/* Drag handle indicator */}
         {draggable && (
@@ -151,9 +156,24 @@ const FileCard = ({ file, onRemove, onMoveToRoot, index, draggable = true, isInF
             <span className="text-xs text-muted-foreground">
               {formatFileSize(file.size)}
             </span>
-            <span className="text-[10px] font-medium text-primary/70 uppercase tracking-wide px-2 py-0.5 rounded-full bg-primary/10">
-              {category}
-            </span>
+            <div className="flex items-center gap-1">
+              {onDownload && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDownload(file.id);
+                  }}
+                  className="p-1 rounded hover:bg-secondary"
+                  title="Download"
+                >
+                  <Download className="w-3.5 h-3.5 text-muted-foreground" />
+                </button>
+              )}
+              <ShareDialog targetType="file" targetId={file.id} targetName={file.name} />
+              <span className="text-[10px] font-medium text-primary/70 uppercase tracking-wide px-2 py-0.5 rounded-full bg-primary/10">
+                {category}
+              </span>
+            </div>
           </div>
         </div>
       </div>
